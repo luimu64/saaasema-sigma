@@ -5,14 +5,13 @@ constexpr u8 MAGIC_PIN = A0;
 constexpr u8 MAX_LETTER_COUNT = 28;
 constexpr u8 FIRST_CUSTOM_CHAR_INDEX = 26;
 constexpr u8 SCREEN_WIDTH = 20;
-
+constexpr u8 TOTAL_SCREEN_SIZE = SCREEN_WIDTH*4;
 
 struct Vec2u8
 {
   u8 x;
   u8 y;
 };
-
 
 constexpr byte swedishLetterA[8] = {
   B00000,
@@ -25,7 +24,6 @@ constexpr byte swedishLetterA[8] = {
   B01111
 };
 
-
 constexpr byte letterO[8] = {
   B00000,
   B10101,
@@ -37,12 +35,11 @@ constexpr byte letterO[8] = {
   B01110
 };
 
-
-
 const int rs = 8, en = 7, d4 = 6, d5 = 5, d6 = 4, d7 = 3;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
-Vec2u8 currentPosition = {0,0};
+Vec2u8 currentPosition = {0, 0};
 u8 iterator = 0;
+u8 iteratorChar = 0;
 
 Vec2u8 indexToScreenPosition(u8 index)
 {
@@ -55,7 +52,7 @@ Vec2u8 indexToScreenPosition(u8 index)
 void setup()
 {
   Serial.begin(9600);
-  lcd.begin(20,4);
+  lcd.begin(20, 4);
   lcd.setCursor(currentPosition.x, currentPosition.y);
   lcd.createChar(0, swedishLetterA);
   lcd.createChar(1, letterO);
@@ -66,29 +63,26 @@ void loop()
   lcd.clear();
   // calc position
   currentPosition = indexToScreenPosition(iterator);
-  if (currentPosition.y == 1)
+
+  int tempVal = currentPosition.y % 4;
+  if (tempVal == 1 || tempVal == 3)
   {
     currentPosition.x = SCREEN_WIDTH - 1 - currentPosition.x;
   }
 
+
   lcd.setCursor(currentPosition.x, currentPosition.y);
-  
-  if (iterator >= FIRST_CUSTOM_CHAR_INDEX)
+
+  if (iteratorChar >= FIRST_CUSTOM_CHAR_INDEX)
   {
-    lcd.write(byte(iterator - FIRST_CUSTOM_CHAR_INDEX));
-    Serial.println(currentPosition.x);
-    Serial.println(currentPosition.y);
-    Serial.println(iterator - FIRST_CUSTOM_CHAR_INDEX);
+    lcd.write(byte(iteratorChar - FIRST_CUSTOM_CHAR_INDEX));
   }
   else
   {
-    const char charToWrite = 65 + iterator;
+    const char charToWrite = 65 + (iteratorChar % 26); // Restart from A after Z
     lcd.write(charToWrite);
-    Serial.println(currentPosition.x);
-    Serial.println(currentPosition.y);
-    Serial.println(charToWrite);
   }
-
-  iterator = (iterator + 1) % MAX_LETTER_COUNT;
-  delay(400); 
+  iteratorChar = (iteratorChar + 1) % MAX_LETTER_COUNT; 
+  iterator = (iterator + 1) % TOTAL_SCREEN_SIZE;
+  delay(200);
 }
