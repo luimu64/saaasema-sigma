@@ -80,7 +80,7 @@ const char* getDirectionStr(const int direction)
     return " NW";
   }
   
-  return " ERROR Tehee";
+  return " NULL";
 }
 
 void printData()
@@ -117,12 +117,7 @@ void loop()
   Serial.println(windDirection);
 
   analogDataMapIndex = (analogDataMapIndex + 1) % MAX_COUNT;
-
-
   digitalDataMap[digitalDataMapIndex] = -0.24f + pulse * 0.699f;
-  // U * 0.24 + F  * 0.699
-  
-
   digitalDataMapIndex = (digitalDataMapIndex + 1) % MAX_COUNT; 
   pulse = 0; 
 
