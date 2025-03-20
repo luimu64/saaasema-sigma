@@ -1,12 +1,9 @@
 #include <LiquidCrystal.h>
-#include <TimerOne.h>
-
 
 constexpr uint8_t MAGIC_PIN = A0;
 constexpr float vcc = 4.77;
 constexpr int MAX_COUNT = 10;
 
-volatile byte time = 0;
 volatile byte pulse = 0;
 
 float digitalDataMap[MAX_COUNT]{};
@@ -33,8 +30,6 @@ void setup()
   Serial.begin(9600);
   pinMode(MAGIC_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(2), interupt, RISING);
-  Timer1.initialize(50000); // 50ms
-  Timer1.attachInterrupt(timerRoutine);
   lcd.begin(20, 4);
   lcd.createChar(0,customChar);
 }
@@ -42,11 +37,6 @@ void setup()
 void interupt()
 {
   pulse++;
-}
-
-void timerRoutine()
-{
-  time++;
 }
 
 int calculateAverage(const float* array)
@@ -93,8 +83,6 @@ const char* getDirectionStr(const int direction)
   return " ERROR Tehee";
 }
 
-
-
 void printData()
 {
   lcd.setCursor(0, 0);
@@ -108,6 +96,7 @@ void printData()
   lcd.print("Tuulennopeus:");
   lcd.setCursor(0, 3);
   lcd.print(calculateAverage(digitalDataMap));
+  lcd.print(" m/s");
 }
 
 void loop()
@@ -129,7 +118,11 @@ void loop()
 
   analogDataMapIndex = (analogDataMapIndex + 1) % MAX_COUNT;
 
-  digitalDataMap[digitalDataMapIndex] = pulse / 5;
+
+  digitalDataMap[digitalDataMapIndex] = -0.24f + pulse * 0.699f;
+  // U * 0.24 + F  * 0.699
+  
+
   digitalDataMapIndex = (digitalDataMapIndex + 1) % MAX_COUNT; 
   pulse = 0; 
 
