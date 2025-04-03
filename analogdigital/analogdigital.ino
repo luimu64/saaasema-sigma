@@ -3,7 +3,7 @@
 #include <PubSubClient.h>
 
 constexpr uint8_t MAGIC_PIN = A0;
-constexpr float vcc = 4.77;
+constexpr float vcc = 4.7;
 constexpr int MAX_COUNT = 10;
 
 volatile byte pulse = 0;
@@ -12,7 +12,7 @@ float digitalDataMap[MAX_COUNT]{};
 float analogDataMap[MAX_COUNT]{};
 int analogDataMapIndex = 0;
 int digitalDataMapIndex = 0;
-char buffer[100];
+char buffer[190];
 
 constexpr byte customChar[8] = {B00000, B01000, B10100, B01000,
                                 B00000, B00000, B00000, B00000};
@@ -45,7 +45,7 @@ int calculateAverage(const float *array) {
   return (int)(a / MAX_COUNT);
 }
 
-const char *getDirectionStr(const int direction) {
+const char *getDirectionStr(int direction) {
   if ((direction >= 0 && direction < 45) ||
       (direction >= 315 && direction <= 360)) {
     return " N";
@@ -66,7 +66,7 @@ const char *getDirectionStr(const int direction) {
   return " NULL";
 }
 
-void printData(int direction, char *directionStr, int speed) {
+void printData(int direction, String directionStr, int speed) {
   lcd.setCursor(0, 0);
   lcd.print("Tuulensuunta:");
   lcd.setCursor(0, 1);
@@ -93,30 +93,23 @@ void fetch_IP() {
   }
 }
 
-void send_MQTT_message(char *message) {
+void send_MQTT_message(String message) {
   if (!client.connected()) { // Tarkistetaan onko yhteys MQTT-brokeriin
                              // muodostettu
     connect_MQTT_server();   // Jos yhteyttä ei ollut, kutsutaan yhdistä
                              // -funktiota
   }
-  if (client.connected()) { // Jos yhteys on muodostettu
-    client.publish(outTopic,
-                   message); // Lähetetään viesti MQTT-brokerille
-    Serial.println(
-        "Message sent to MQTT server."); // Tulostetaan viesti onnistuneesta
-                                         // lähettämisestä
+  if (client.connected()) {
+    client.publish(outTopic, message.c_str());
+    Serial.println("Message sent to MQTT server.");
   } else {
-    Serial.println(
-        "Failed to send message: not connected to MQTT server."); // Ei yhteyttä
-                                                                  // ->
-                                                                  // Yhteysvirheilmoitus
+    Serial.println("Failed to send message: not connected to MQTT server.");
   }
 }
 
 void connect_MQTT_server() {
   Serial.println("Connecting to MQTT"); // Tulostetaan vähän info-viestiä
-  if (client.connect(
-          clientId)) { // Tarkistetaan saadaanko yhteys MQTT-brokeriin
+  if (client.connect(clientId, deviceId, deviceSecret)) {
     Serial.println("Connected OK"); // Yhdistetty onnistuneesti
   } else {
     Serial.println("Connection failed."); // Yhdistäminen epäonnistui
@@ -144,10 +137,11 @@ void loop() {
   lastMillis = millis();
 
   const float voltage =
-      (static_cast<float>(analogRead(MAGIC_PIN)) / 1023) * vcc;
-  const float windDirection = 94.5703 * voltage + 0.1586;
+      ((static_cast<float>(analogRead(MAGIC_PIN)) * (vcc / 1023)));
+  Serial.println("Voltage: " + String(voltage) + " V");
+  const float windDirection = 94.5703 * voltage - 9;
+  Serial.println("Wind direction: " + String(windDirection) + " degrees");
   analogDataMap[analogDataMapIndex] = windDirection;
-  Serial.println(windDirection);
 
   analogDataMapIndex = (analogDataMapIndex + 1) % MAX_COUNT;
   digitalDataMap[digitalDataMapIndex] = -0.24f + pulse * 0.699f;
@@ -158,12 +152,13 @@ void loop() {
   const char *directionStr = getDirectionStr(direction);
   const int speed = calculateAverage(digitalDataMap);
 
-  printData(direction, directionStr, speed);
-  snprintf(buffer, sizeof(buffer),
-           "IOTJS={\"S_name1\":\"tuulensuunta\",\"S_value1\":%d,\"S_name2\":"
-           "\"tuulensuunta-kirjain\",\"S_value2\":%s,\"S_name3\":"
-           "\"tuulennopeus\",\"S_value3\":%d}",
-           direction, *directionStr, speed);
+  const String message =
+      String("IOTJS={\"S_name1\":\"sigma-ts\",\"S_value1\":") +
+      String(direction) + String(",\"S_name2\":\"sigma-tsk\",\"S_value2\":") +
+      String(directionStr) + String(",\"S_name3\":\"sigma-tn\",\"S_value3\":") +
+      String(speed) + String("}");
 
-  send_MQTT_message(buffer); // Kutsutaan MQTT-viestin lähettämis-funktiota
+  printData(direction, directionStr, speed); // Tulostetaan LCD-näytölle
+
+  send_MQTT_message(message); // Kutsutaan MQTT-viestin lähettämis-funktiota
 }
