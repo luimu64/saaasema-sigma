@@ -115,7 +115,7 @@ void printCustom() {
   lcd.setCursor(currentPosition.x, currentPosition.y);
 
   if (iteratorChar >= FIRST_CUSTOM_CHAR_INDEX) {
-    lcd.write(byte(iteratorChar - FIRST_CUSTOM_CHAR_INDEX));
+    lcd.write(byte(iteratorChar - FIRST_CUSTOM_CHAR_INDEX)+1); // INFO: JOS SPESSU KIRJAIMET MENEVÄT HUPSUSTI NIIN POISTA TÄMÄ "+ 1" KOHTA.
   }
   else {
     const char charToWrite = 65 + (iteratorChar % 26); // Restart from A after Z
@@ -250,8 +250,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(2), interrupt, RISING);
   lcd.begin(20, 4);
   lcd.createChar(0, customChar);
-  lcd.createChar(0, swedishLetterA);
-  lcd.createChar(1, letterO);
+  lcd.createChar(1, swedishLetterA);
+  lcd.createChar(2, letterO);
   fetch_IP();
 }
 
