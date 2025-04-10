@@ -1,7 +1,6 @@
 #include <LiquidCrystal.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
-#include <Keyboard.h>
 
 
 #define outTopic "ICT4_out_2020"        // Aihe, jolle viesti lähetetään
@@ -50,6 +49,19 @@ constexpr uint8_t myMAC[6] = {0xA8, 0x61, 0x0A, 0xAE,
 // LCD SCREEN
 constexpr int rs = 8, en = 7, d4 = 6, d5 = 5, d6 = 4, d7 = 3;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+
+// KEYBOARD
+enum ButtonPins : uint8_t {
+ BUTTON_DOWN = 0
+ ONE = 1
+ TWO = 2
+ THREE = 3
+ A = 4 
+};
+
+
+
 
 //Json layout string
 const char* jsonLayoutStr = "IOTJS={\"S_name\":\"sigma-ts\",\"S_value\":";
@@ -243,10 +255,21 @@ void connect_MQTT_server() {
   }
 }
 
+
+
+
 void setup() {
   Serial.begin(9600);
   pinMode(ANALOG_PIN, INPUT);
   pinMode(DIGITAL_PIN, INPUT_PULLUP);
+
+  pinMode(ButtonPins::BUTTON_DOWN, INPUT_PULLUP);
+  pinMode(ButtonPins::ONE, INPUT_PULLUP);
+  pinMode(ButtonPins::TWO, INPUT_PULLUP);
+  pinMode(ButtonPins::THREE, INPUT_PULLUP);
+  pinMode(ButtonPins::A, INPUT_PULLUP);
+
+
   attachInterrupt(digitalPinToInterrupt(2), interrupt, RISING);
   lcd.begin(20, 4);
   lcd.createChar(0, customChar);
@@ -254,6 +277,29 @@ void setup() {
   lcd.createChar(2, letterO);
   fetch_IP();
 }
+
+void checkKeyPressed() {
+  if (digitalRead(ButtonPins::BUTTON_DOWN) == HIGH)
+  {
+    return; 
+  }
+
+  if (digitalRead(ButtonPins::ONE) == LOW) {
+    currentTab = Tabs::SERVER_INFO;
+  } 
+  else if (digitalRead(ButtonPins::TWO) == LOW) {
+    currentTab = Tabs::DATA;
+  } 
+  else if (digitalRead(ButtonPins::THREE) == LOW) {
+    currentTab = Tabs::STATS;
+  } 
+  else if (digitalRead(ButtonPins::A) == LOW) {
+    currentTab = Tabs::CUSTOM;
+  }
+
+}
+
+
 
 void loop() {
   static unsigned long lastMillis = 0;
@@ -268,28 +314,7 @@ void loop() {
   lastMillis = millis();
 
   // check key press
-  if (Serial.available())
-  {
-    const char key = Serial.read();
-    switch (key)
-    {
-      case '1':
-        currentTab = Tabs::SERVER_INFO;
-        break;
-      
-      case '2':
-        currentTab = Tabs::DATA;
-        break;
-      
-      case '3':
-        currentTab = Tabs::STATS;
-        break;
-      
-      case 'A':
-        currentTab = Tabs::CUSTOM;
-        break;
-    }
-  }
+  checkKeyPressed();
 
   const float voltage =
       ((static_cast<float>(analogRead(ANALOG_PIN)) * (vcc / 1023)));
