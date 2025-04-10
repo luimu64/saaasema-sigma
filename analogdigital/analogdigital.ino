@@ -23,7 +23,6 @@ enum Tabs : uint8_t {
   CUSTOM
 };
 
-
 struct StatsData {
   float lowest;
   float highest;
@@ -87,13 +86,13 @@ Vec2u8 indexToScreenPosition(uint8_t index) {
 void interrupt() { pulse++; };
 
 
-void render() {
+void render(const int direction, const char* directionStr, const int speed) {
   switch (currentTab) {
     case Tabs::SERVER_INFO:
       printServerInfo();
       break;
     case Tabs::DATA:
-      printData();
+      printData(direction, directionStr, speed);
       break;
     case Tabs::STATS:
       printStats();
@@ -194,18 +193,17 @@ void printStats() {
   lcd.print(analogStats.lowest);
 }
 
-void printData() {
+void printData(const int direction, const char* directionStr, const int speed) {
   lcd.setCursor(0, 0);
   lcd.print("Tuulensuunta:");
   lcd.setCursor(0, 1);
-  const int direction = calculateAverage(analogDataMap);
   lcd.print(direction);
   lcd.write(byte(0));
-  lcd.print(getDirectionStr(direction));
+  lcd.print(directionStr);
   lcd.setCursor(0, 2);
   lcd.print("Tuulennopeus:");
   lcd.setCursor(0, 3);
-  lcd.print(calculateAverage(digitalDataMap));
+  lcd.print(speed);
   lcd.print(" m/s");
 }
 
@@ -311,7 +309,7 @@ void loop() {
   const char *directionStr = getDirectionStr(direction);
   const int speed = calculateAverage(digitalDataMap);
 
-  render();
+  render(direction, directionStr, speed);
 
   const String firstMessage = String(jsonLayoutStr + String(direction) + "}");
   const String secondMessage = String(jsonLayoutStr + String(speed) + "}");
