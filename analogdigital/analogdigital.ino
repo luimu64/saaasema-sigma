@@ -66,10 +66,6 @@ byte pinColumns[COLS] = {A1, A2, A3, A4};
 Keypad keypad = Keypad(makeKeymap(keys), pinRows, pinColumns, ROWS, COLS);
 
 
-//Json layout string
-const char* jsonLayoutStr = "IOTJS={\"S_name\":\"sigma-ts\",\"S_value\":";
-
-
 // CUSTOM TAB (MOVING lETTERS)
 struct Vec2u8 {
   uint8_t x;
@@ -332,15 +328,23 @@ void loop() {
 
   messageDelay = 0;
 
-  const String firstMessage = String(jsonLayoutStr + String(direction) + "}");
-  const String secondMessage = String(jsonLayoutStr + String(speed) + "}");
+  const char* suffix = messageDedicator ? "ts" : "tn";
+  const float value = messageDedicator ? direction : speed;
+  const String message = "IOTJS={\"S_name\":\"sigma-" + String(suffix) + "\",\"S_value\":" + String(value) + "}";
+  send_MQTT_message(message);
+  messageDedicator = !messageDedicator;
+
+
+
+  //const String firstMessage = String(jsonLayoutStr + String(direction) + "}");
+  //const String secondMessage = String(jsonLayoutStr2 + String(speed) + "}");
 
   // Kutsutaan MQTT-viestin lähettämis-funktiota
-  messageDedicator = !messageDedicator;
-  if (messageDedicator) {
-    send_MQTT_message(firstMessage);
-    return;
-  }
+  //messageDedicator = !messageDedicator;
+  //if (messageDedicator) {
+   // send_MQTT_message(firstMessage);
+   // return;
+  //}
 
-  send_MQTT_message(secondMessage);
+  //send_MQTT_message(secondMessage);
 }
