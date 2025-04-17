@@ -1,6 +1,7 @@
 #include <LiquidCrystal.h>
 #include <Ethernet.h>
 #include <PubSubClient.h>
+#include <Keypad.h>
 
 
 #define outTopic "ICT4_out_2020"        // Aihe, jolle viesti lähetetään
@@ -51,22 +52,25 @@ constexpr int rs = 8, en = 7, d4 = 6, d5 = 5, d6 = 4, d7 = 3;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 
-// KEYBOARD
-enum ButtonPins : uint8_t {
- BUTTON_DOWN = 0
- ONE = 1
- TWO = 2
- THREE = 3
- A = 4 
+// KEYBOARD STUFF
+constexpr byte ROWS = 1;
+constexpr byte COLS = 4;
+
+constexpr char keys[ROWS][COLS] = {
+  {'1','2','3','A'}
 };
 
+byte pinRows[ROWS] = {A5};
+byte pinColumns[COLS] = {A1, A2, A3, A4};
 
+Keypad keypad = Keypad(makeKeymap(keys), pinRows, pinColumns, ROWS, COLS);
 
 
 //Json layout string
 const char* jsonLayoutStr = "IOTJS={\"S_name\":\"sigma-ts\",\"S_value\":";
 
-// CUSTOM
+
+// CUSTOM TAB (MOVING lETTERS)
 struct Vec2u8 {
   uint8_t x;
   uint8_t y;
@@ -87,7 +91,6 @@ Vec2u8 currentPosition = {0, 0};
 uint8_t iterator = 0;
 uint8_t iteratorChar = 0;
 
-
 Vec2u8 indexToScreenPosition(uint8_t index) {
   Vec2u8 result{};
   result.x = index % SCREEN_WIDTH;
@@ -96,7 +99,6 @@ Vec2u8 indexToScreenPosition(uint8_t index) {
 }
 
 void interrupt() { pulse++; };
-
 
 void render(const int direction, const char* directionStr, const int speed) {
   switch (currentTab) {
@@ -108,8 +110,10 @@ void render(const int direction, const char* directionStr, const int speed) {
       break;
     case Tabs::STATS:
       printStats();
+      break;
     case Tabs::CUSTOM:
       printCustom();
+      break;
     default:
       return;
   }
@@ -123,20 +127,18 @@ void printCustom() {
     currentPosition.x = SCREEN_WIDTH - 1 - currentPosition.x;
   }
 
-
   lcd.setCursor(currentPosition.x, currentPosition.y);
 
   if (iteratorChar >= FIRST_CUSTOM_CHAR_INDEX) {
-    lcd.write(byte(iteratorChar - FIRST_CUSTOM_CHAR_INDEX)+1); // INFO: JOS SPESSU KIRJAIMET MENEVÄT HUPSUSTI NIIN POISTA TÄMÄ "+ 1" KOHTA.
+    lcd.write(byte(iteratorChar - FIRST_CUSTOM_CHAR_INDEX)+1);
   }
   else {
-    const char charToWrite = 65 + (iteratorChar % 26); // Restart from A after Z
+    const char charToWrite = 65 + (iteratorChar % 26);
     lcd.write(charToWrite);
   }
   iteratorChar = (iteratorChar + 1) % MAX_LETTER_COUNT; 
   iterator = (iterator + 1) % TOTAL_SCREEN_SIZE;
 }
-
 
 int calculateAverage(const float* array) {
   float a = 0.0;  
@@ -167,7 +169,6 @@ const char *getDirectionStr(int direction) {
 
   return " NULL";
 }
-
 
 void updateStatus(StatsData& data, const float input) {
   if (input < data.lowest) data.lowest = input;
@@ -255,20 +256,10 @@ void connect_MQTT_server() {
   }
 }
 
-
-
-
 void setup() {
   Serial.begin(9600);
   pinMode(ANALOG_PIN, INPUT);
   pinMode(DIGITAL_PIN, INPUT_PULLUP);
-
-  pinMode(ButtonPins::BUTTON_DOWN, INPUT_PULLUP);
-  pinMode(ButtonPins::ONE, INPUT_PULLUP);
-  pinMode(ButtonPins::TWO, INPUT_PULLUP);
-  pinMode(ButtonPins::THREE, INPUT_PULLUP);
-  pinMode(ButtonPins::A, INPUT_PULLUP);
-
 
   attachInterrupt(digitalPinToInterrupt(2), interrupt, RISING);
   lcd.begin(20, 4);
@@ -279,31 +270,30 @@ void setup() {
 }
 
 void checkKeyPressed() {
-  if (digitalRead(ButtonPins::BUTTON_DOWN) == HIGH)
-  {
-    return; 
-  }
+  const char key = keypad.getKey();
 
-  if (digitalRead(ButtonPins::ONE) == LOW) {
-    currentTab = Tabs::SERVER_INFO;
-  } 
-  else if (digitalRead(ButtonPins::TWO) == LOW) {
-    currentTab = Tabs::DATA;
-  } 
-  else if (digitalRead(ButtonPins::THREE) == LOW) {
-    currentTab = Tabs::STATS;
-  } 
-  else if (digitalRead(ButtonPins::A) == LOW) {
-    currentTab = Tabs::CUSTOM;
+  switch(key){
+    case '1':
+      currentTab = Tabs::SERVER_INFO;
+      break;
+    case '2':
+      currentTab = Tabs::DATA;
+      break;
+    case '3':
+      currentTab = Tabs::STATS;
+      break;
+    case 'A':
+      currentTab = Tabs::CUSTOM;
+      break;
   }
-
 }
-
-
 
 void loop() {
   static unsigned long lastMillis = 0;
+  static unsigned long sendTimer = 0;
 
+  checkKeyPressed();
+ 
   if (millis() - lastMillis < 1000)
   {
     return; 
@@ -313,9 +303,6 @@ void loop() {
 
   lastMillis = millis();
 
-  // check key press
-  checkKeyPressed();
-
   const float voltage =
       ((static_cast<float>(analogRead(ANALOG_PIN)) * (vcc / 1023)));
   // values found by educated guesses (randomized testing)
@@ -324,7 +311,7 @@ void loop() {
   updateStatus(analogStats, windDirection);
   analogDataMapIndex = (analogDataMapIndex + 1) % MAX_COUNT;
   
-  const float digitalOutput = -0.24f + pulse * 0.699f;
+  const float digitalOutput = max(0.f,-0.24f + pulse * 0.699f);
   digitalDataMap[digitalDataMapIndex] = digitalOutput;
   updateStatus(digitalStats, digitalOutput);
   digitalDataMapIndex = (digitalDataMapIndex + 1) % MAX_COUNT;
@@ -335,6 +322,15 @@ void loop() {
   const int speed = calculateAverage(digitalDataMap);
 
   render(direction, directionStr, speed);
+
+  if (millis() - sendTimer < 5000) { // 5 sec delay for sending data
+    return; 
+  }
+  sendTimer = 0;
+
+  if (!client.connected()) {
+    return;
+  }
 
   const String firstMessage = String(jsonLayoutStr + String(direction) + "}");
   const String secondMessage = String(jsonLayoutStr + String(speed) + "}");
