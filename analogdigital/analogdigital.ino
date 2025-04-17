@@ -290,15 +290,17 @@ void checkKeyPressed() {
 
 void loop() {
   static unsigned long lastMillis = 0;
-  static unsigned long sendTimer = 0;
-
+  static uint8_t messageDelay = 0;
+  
   checkKeyPressed();
  
   if (millis() - lastMillis < 1000)
   {
     return; 
   }
-  
+
+  messageDelay++;
+
   lcd.clear();
 
   lastMillis = millis();
@@ -323,14 +325,12 @@ void loop() {
 
   render(direction, directionStr, speed);
 
-  if (millis() - sendTimer < 5000) { // 5 sec delay for sending data
-    return; 
-  }
-  sendTimer = 0;
-
-  if (!client.connected()) {
+  if (messageDelay < 5)
+  {
     return;
   }
+
+  messageDelay = 0;
 
   const String firstMessage = String(jsonLayoutStr + String(direction) + "}");
   const String secondMessage = String(jsonLayoutStr + String(speed) + "}");
