@@ -1,41 +1,145 @@
-#include <Ethernet.h>
 #include <LiquidCrystal.h>
+#include <Ethernet.h>
 #include <PubSubClient.h>
 
-#define outTopic "ICT_2021"        // Aihe, jolle viesti lähetetään
-char *clientId = "sigma-24TIETOA"; // MQTT-clientin tunniste
-char *deviceId = "sigma";          // Laitteen tunniste
-char *deviceSecret = "tamk";
 
-constexpr uint8_t ANAL_PIN = A0;
-volatile byte pulse = 0;
-constexpr byte DIG_PIN = 2;
+#define outTopic "ICT4_out_2020"        // Aihe, jolle viesti lähetetään
+constexpr char *clientId = "sigma-24TIETOA"; // MQTT-clientin tunniste
+constexpr char *deviceId = "sigma";          // Laitteen tunniste
+constexpr char *deviceSecret = "tamk";
+
+constexpr uint8_t ANALOG_PIN = A0;
+constexpr byte DIGITAL_PIN = 2;
 constexpr float vcc = 4.7;
 constexpr int MAX_COUNT = 10;
 constexpr byte customChar[8] = {B00000, B01000, B10100, B01000,
                                 B00000, B00000, B00000, B00000};
 
+enum Tabs : uint8_t {
+  SERVER_INFO,
+  DATA,
+  STATS,
+  CUSTOM
+};
+
+struct StatsData {
+  float lowest;
+  float highest;
+};
+
+StatsData digitalStats{};
+StatsData analogStats{};
+
 float digitalDataMap[MAX_COUNT]{};
 float analogDataMap[MAX_COUNT]{};
+volatile byte pulse = 0;
 int analogDataMapIndex = 0;
-int digitalDataMapIndex = 0;
-char buffer[190];
+int digitalDataMapIndex = 0;                            
+bool messageDedicator = false;
+uint8_t currentTab = Tabs::DATA;
 
 // SERVER STUFF
 byte server[] = {10, 6, 0, 23};               // MQTT-palvelimen IP-osoite
-unsigned int Port = 1883;                     // MQTT-palvelimen portti
-EthernetClient ethClient;                     // Ethernet-kirjaston client-olio
-PubSubClient client(server, Port, ethClient); // PubSubClient-olion luominen
-static uint8_t mymac[6] = {0xA8, 0x61, 0x0A, 0xAE,
+constexpr unsigned int port = 1883;                     // MQTT-palvelimen portti
+EthernetClient ethernetClient;                     // Ethernet-kirjaston client-olio
+PubSubClient client(server, port, ethernetClient); // PubSubClient-olion luominen
+constexpr uint8_t myMAC[6] = {0xA8, 0x61, 0x0A, 0xAE,
                            0x46, 0x8B}; // MAC-osoite Ethernet-liitäntää varten
 
-const int rs = 8, en = 7, d4 = 6, d5 = 5, d6 = 4, d7 = 3;
+// LCD SCREEN
+constexpr int rs = 8, en = 7, d4 = 6, d5 = 5, d6 = 4, d7 = 3;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-void interrupt() { pulse++; }
 
-int calculateAverage(const float *array) {
-  float a = 0.0;
+// KEYBOARD
+enum ButtonPins : uint8_t {
+ BUTTON_DOWN = 0
+ ONE = 1
+ TWO = 2
+ THREE = 3
+ A = 4 
+};
+
+
+
+
+//Json layout string
+const char* jsonLayoutStr = "IOTJS={\"S_name\":\"sigma-ts\",\"S_value\":";
+
+// CUSTOM
+struct Vec2u8 {
+  uint8_t x;
+  uint8_t y;
+};
+
+constexpr byte swedishLetterA[8] = { B00000, B10101, B00000, B01110,
+                                     B00001, B01111, B10001, B01111};
+
+constexpr byte letterO[8] = { B00000, B10101, B00000, B01110,
+                              B10001, B10001, B10001, B01110};
+
+constexpr uint8_t MAX_LETTER_COUNT = 28;
+constexpr uint8_t FIRST_CUSTOM_CHAR_INDEX = 26;
+constexpr uint8_t SCREEN_WIDTH = 20;
+constexpr uint8_t TOTAL_SCREEN_SIZE = SCREEN_WIDTH*4;
+
+Vec2u8 currentPosition = {0, 0};
+uint8_t iterator = 0;
+uint8_t iteratorChar = 0;
+
+
+Vec2u8 indexToScreenPosition(uint8_t index) {
+  Vec2u8 result{};
+  result.x = index % SCREEN_WIDTH;
+  result.y = index / SCREEN_WIDTH;
+  return result;
+}
+
+void interrupt() { pulse++; };
+
+
+void render(const int direction, const char* directionStr, const int speed) {
+  switch (currentTab) {
+    case Tabs::SERVER_INFO:
+      printServerInfo();
+      break;
+    case Tabs::DATA:
+      printData(direction, directionStr, speed);
+      break;
+    case Tabs::STATS:
+      printStats();
+    case Tabs::CUSTOM:
+      printCustom();
+    default:
+      return;
+  }
+}
+
+void printCustom() {
+  currentPosition = indexToScreenPosition(iterator);
+
+  int rowStartDirection = currentPosition.y % 4;
+  if (rowStartDirection == 1 || rowStartDirection == 3) {
+    currentPosition.x = SCREEN_WIDTH - 1 - currentPosition.x;
+  }
+
+
+  lcd.setCursor(currentPosition.x, currentPosition.y);
+
+  if (iteratorChar >= FIRST_CUSTOM_CHAR_INDEX) {
+    lcd.write(byte(iteratorChar - FIRST_CUSTOM_CHAR_INDEX)+1); // INFO: JOS SPESSU KIRJAIMET MENEVÄT HUPSUSTI NIIN POISTA TÄMÄ "+ 1" KOHTA.
+  }
+  else {
+    const char charToWrite = 65 + (iteratorChar % 26); // Restart from A after Z
+    lcd.write(charToWrite);
+  }
+  iteratorChar = (iteratorChar + 1) % MAX_LETTER_COUNT; 
+  iterator = (iterator + 1) % TOTAL_SCREEN_SIZE;
+}
+
+
+int calculateAverage(const float* array) {
+  float a = 0.0;  
   for (int i = 0; i < MAX_COUNT; i++) {
     a += array[i];
   }
@@ -64,7 +168,44 @@ const char *getDirectionStr(int direction) {
   return " NULL";
 }
 
-void printData(int direction, String directionStr, int speed) {
+
+void updateStatus(StatsData& data, const float input) {
+  if (input < data.lowest) data.lowest = input;
+  if (input >  data.highest) data.highest = input;
+}
+
+char* getConnectionStusMessage() {
+  if (client.connected()) {
+    return "Online";
+  }
+  return "Offline";
+}
+
+void printServerInfo() {
+  lcd.setCursor(0, 0);
+  lcd.print("IP: ");
+  lcd.print(Ethernet.localIP());
+  lcd.setCursor(0, 1);
+  lcd.print("MQTT Yhteys: ");
+  lcd.print(getConnectionStusMessage());
+}
+
+void printStats() {
+  lcd.setCursor(0, 0);
+  lcd.print("Digital Max: ");
+  lcd.print(digitalStats.highest);
+  lcd.setCursor(0, 1);
+  lcd.print("Digital Low: ");
+  lcd.print(digitalStats.lowest);
+  lcd.setCursor(0, 2);
+  lcd.print("Analog Max: ");
+  lcd.print(analogStats.highest);
+  lcd.setCursor(0, 3);
+  lcd.print("Analog Low: ");
+  lcd.print(analogStats.lowest);
+}
+
+void printData(const int direction, const char* directionStr, const int speed) {
   lcd.setCursor(0, 0);
   lcd.print("Tuulensuunta:");
   lcd.setCursor(0, 1);
@@ -80,7 +221,7 @@ void printData(int direction, String directionStr, int speed) {
 
 void fetch_IP() {
   bool connectionSuccess = Ethernet.begin(
-      mymac); // Yhdistäminen Ethernet-verkkoon ja tallennetaan yhteyden tila
+      myMAC); // Yhdistäminen Ethernet-verkkoon ja tallennetaan yhteyden tila
   if (!connectionSuccess) {
     Serial.println(
         "Failed to access Ethernet controller"); // Jos yhteys ei onnistunut ->
@@ -114,35 +255,78 @@ void connect_MQTT_server() {
   }
 }
 
+
+
+
 void setup() {
   Serial.begin(9600);
-  pinMode(ANAL_PIN, INPUT);
-  pinMode(DIG_PIN, INPUT_PULLUP);
+  pinMode(ANALOG_PIN, INPUT);
+  pinMode(DIGITAL_PIN, INPUT_PULLUP);
+
+  pinMode(ButtonPins::BUTTON_DOWN, INPUT_PULLUP);
+  pinMode(ButtonPins::ONE, INPUT_PULLUP);
+  pinMode(ButtonPins::TWO, INPUT_PULLUP);
+  pinMode(ButtonPins::THREE, INPUT_PULLUP);
+  pinMode(ButtonPins::A, INPUT_PULLUP);
+
+
   attachInterrupt(digitalPinToInterrupt(2), interrupt, RISING);
   lcd.begin(20, 4);
   lcd.createChar(0, customChar);
+  lcd.createChar(1, swedishLetterA);
+  lcd.createChar(2, letterO);
   fetch_IP();
 }
+
+void checkKeyPressed() {
+  if (digitalRead(ButtonPins::BUTTON_DOWN) == HIGH)
+  {
+    return; 
+  }
+
+  if (digitalRead(ButtonPins::ONE) == LOW) {
+    currentTab = Tabs::SERVER_INFO;
+  } 
+  else if (digitalRead(ButtonPins::TWO) == LOW) {
+    currentTab = Tabs::DATA;
+  } 
+  else if (digitalRead(ButtonPins::THREE) == LOW) {
+    currentTab = Tabs::STATS;
+  } 
+  else if (digitalRead(ButtonPins::A) == LOW) {
+    currentTab = Tabs::CUSTOM;
+  }
+
+}
+
+
 
 void loop() {
   static unsigned long lastMillis = 0;
 
-  if (millis() - lastMillis < 1000) {
-    return;
+  if (millis() - lastMillis < 1000)
+  {
+    return; 
   }
-
+  
   lcd.clear();
 
   lastMillis = millis();
 
+  // check key press
+  checkKeyPressed();
+
   const float voltage =
-      ((static_cast<float>(analogRead(ANAL_PIN)) * (vcc / 1023)));
+      ((static_cast<float>(analogRead(ANALOG_PIN)) * (vcc / 1023)));
   // values found by educated guesses (randomized testing)
   const float windDirection = max(0.0f, 94.5703 * voltage - 9);
   analogDataMap[analogDataMapIndex] = windDirection;
-
+  updateStatus(analogStats, windDirection);
   analogDataMapIndex = (analogDataMapIndex + 1) % MAX_COUNT;
-  digitalDataMap[digitalDataMapIndex] = -0.24f + pulse * 0.699f;
+  
+  const float digitalOutput = -0.24f + pulse * 0.699f;
+  digitalDataMap[digitalDataMapIndex] = digitalOutput;
+  updateStatus(digitalStats, digitalOutput);
   digitalDataMapIndex = (digitalDataMapIndex + 1) % MAX_COUNT;
   pulse = 0;
 
@@ -150,13 +334,17 @@ void loop() {
   const char *directionStr = getDirectionStr(direction);
   const int speed = calculateAverage(digitalDataMap);
 
-  const String message =
-      String("IOTJS={\"S_name1\":\"sigma-ts\",\"S_value1\":") +
-      String(direction) + String(",\"S_name2\":\"sigma-tsk\",\"S_value2\":") +
-      String(directionStr) + String(",\"S_name3\":\"sigma-tn\",\"S_value3\":") +
-      String(speed) + String("}");
+  render(direction, directionStr, speed);
 
-  printData(direction, directionStr, speed); // Tulostetaan LCD-näytölle
+  const String firstMessage = String(jsonLayoutStr + String(direction) + "}");
+  const String secondMessage = String(jsonLayoutStr + String(speed) + "}");
 
-  send_MQTT_message(message); // Kutsutaan MQTT-viestin lähettämis-funktiota
+  // Kutsutaan MQTT-viestin lähettämis-funktiota
+  messageDedicator = !messageDedicator;
+  if (messageDedicator) {
+    send_MQTT_message(firstMessage);
+    return;
+  }
+
+  send_MQTT_message(secondMessage);
 }
