@@ -333,18 +333,4 @@ void loop() {
   const String message = "IOTJS={\"S_name\":\"sigma-" + String(suffix) + "\",\"S_value\":" + String(value) + "}";
   send_MQTT_message(message);
   messageDedicator = !messageDedicator;
-
-
-
-  //const String firstMessage = String(jsonLayoutStr + String(direction) + "}");
-  //const String secondMessage = String(jsonLayoutStr2 + String(speed) + "}");
-
-  // Kutsutaan MQTT-viestin lähettämis-funktiota
-  //messageDedicator = !messageDedicator;
-  //if (messageDedicator) {
-   // send_MQTT_message(firstMessage);
-   // return;
-  //}
-
-  //send_MQTT_message(secondMessage);
 }
